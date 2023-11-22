@@ -259,7 +259,7 @@ ggplot(ueto) +
   labs(x = "Marca", y = "Frequência") +
   theme_estat() +
   coord_flip() +
-  ylim(0, max(vapovapo$freq) * 1.2)
+  ylim(0, max(ueto$freq) * 1.2)
 
 
 #Analise 6 (certo?)
