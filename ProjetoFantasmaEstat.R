@@ -1,9 +1,12 @@
-aaa <- read.csv("vendas.csv")
+vendas <- read.csv("vendas.csv")
 
 library(tidyverse)
 library(dplyr)
 library(ggplot2)
 library(lubridate)
+library(xtable)
+library(scales)
+
 
 cores_estat <- c("#A11D21", "#003366", "#CC9900", "#663333", "#FF6600 ", "#CC9966", "#999966", "#006606", "#008091", "#041835", "#666666 ")
 
@@ -26,41 +29,73 @@ return( list(
 }
 
 
-#Grafico por mes
+#Analise 1 (certo)
 
 
-aaa$Data.Venda = mdy(aaa$Data.Venda)
-aaa$Meses <- month(aaa$Data.Venda)
-aaa$Meses = month.name[aaa$Meses]
+
+vendas$Data.Venda = mdy(vendas$Data.Venda)
+
+vendas$Meses <- month(vendas$Data.Venda)
+
+# vendas$Meses = month.name[vendas$Meses]
+
+mes_categoria <- vendas %>%
+  select(Meses, Unique.ID, Category, Price) %>%
+  rename(Moda = Category) %>%
+  mutate(
+    Moda = case_when(
+      str_detect(Moda, "Men's Fashion") ~ "Masculina",
+      str_detect(Moda, "Women's Fashion") ~ "Feminina",
+      str_detect(Moda, "Kids' Fashion") ~ "Infantil",
+      TRUE ~ as.character(Moda)
+    )
+  )
+
+mes_categoria <- na.omit(mes_categoria)
+
+mes_categoria <- distinct(mes_categoria, Unique.ID, .keep_all = TRUE)
 
 
-vendas_por_mes_categoria <- aaa %>%
-  group_by(Meses, Category) %>%
+mes_categoria$Meses <- as.factor(mes_categoria$Meses)
+
+mes_categoria$Meses <- factor(mes_categoria$Meses,
+                              levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"),
+                              labels =  c("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul","Ago", "Set", "Out", "Nov", "Dez")
+)
+
+
+
+
+vendas_por_mes_categoria <- mes_categoria %>%
+  group_by(Meses, Moda) %>%
   summarise(Faturamento = sum(Price, na.rm = TRUE))
 
-custom_month_order <- c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
 
-vendas_por_mes_categoria <- vendas_por_mes_categoria %>% 
-  arrange(match(Meses, custom_month_order))
+# vendas_por_mes_categoria$Meses <- factor(vendas_por_mes_categoria$Meses, levels = month.name, ordered = TRUE)
 
-
-vendas_por_mes_categoria <- na.omit(vendas_por_mes_categoria)
-
-
-ggplot(vendas_por_mes_categoria, aes(x = factor(Meses, levels = custom_month_order), y = Faturamento, group = Category, colour = Category)) +
-  geom_line(size = 1) +
-  geom_point(size = 2) +
-  labs(x = "Meses", y = "Faturamento") +
-  theme_estat()
+# vendas_por_mes_categoria <- vendas_por_mes_categoria[order(vendas_por_mes_categoria$Meses), ]
 
 
 
-#Box splot 
+ggplot( vendas_por_mes_categoria ) +
+  aes(x = Meses , y = Faturamento , group = Moda , colour = Moda ) +
+  geom_line(linewidth = 1) +
+  geom_point (size = 2) +
+  labs(x = "Mêses", y = "Faturamento") +
+  theme_estat ()
 
-Variacao <- aaa %>%
-  select(Brand, Price)
+ggsave("hist_uni_porc.pdf", width = 158, height = 93, units = "mm")
+
+#Analise 2 (certo)
+
+
+Variacao <- vendas %>%
+  select(Unique.ID, Brand, Price)
 
 Variacao <- na.omit(Variacao)
+
+Variacao <- distinct(Variacao, Unique.ID, .keep_all = TRUE)
+
 
 ggplot(Variacao) +
   aes(x = Brand , y = Price) +
@@ -70,24 +105,35 @@ ggplot(Variacao) +
   labs( x = "Marca", y = "Preço") +
   theme_estat()
 
+ggsave ("box_bi.pdf", width = 158, height = 93, units = "mm")
+
+quadro_resumo <- Variacao %>% 
+  group_by(Brand) %>% 
+  summarize(Média = round(mean(Price),2),
+            `Desvio Padrão` = round(sd(Price),2),
+            `Variância` = round(var(Price),2),
+            `Mínimo` = round(min(Price),2),
+            `1º Quartil` = round(quantile(Price, probs = .25),2),
+            Mediana = round(quantile(Price, probs = .5),2),
+            `3º Quartil` = round(quantile(Price, probs = .75),2),
+            `Máximo` = round(max(Price),2)) %>% t() %>% as.data.frame() %>% 
+  mutate(V1 = str_replace(V1,"\\.",",")) 
+
+xtable::xtable(quadro_resumo)
 
 
-resumo_por_marca <- aaa %>%
-  group_by(Brand) %>%
-  summarise(
-    Media = mean(Price, na.rm = TRUE),
-    Mediana = median(Price, na.rm = TRUE),
-    Minimo = min(Price, na.rm = TRUE),
-    Maximo = max(Price, na.rm = TRUE),
-    Variacao = Maximo - Minimo
-  )
-print(resumo_por_marca)
+#Analise 3 (certo?)
 
 
+Moda = vendas %>%
+  select(Unique.ID,Color,Category)
 
-# Terceira analise
+Moda = na.omit(Moda)
 
-REC <- aaa %>%
+Moda = distinct(Moda, Unique.ID, .keep_all = TRUE)
+
+
+REC <- Moda %>%
   rename(Categoria = Category, Cor = Color) %>%
   mutate(Categoria = case_when(
     Categoria %>% str_detect("Men's Fashion") ~ "Moda Masculina",
@@ -107,17 +153,15 @@ REC <- aaa %>%
   mutate(
     freq_relativa = scales::percent(freq / sum(freq))
   ) %>%
-  ungroup()  
+  ungroup()
 
 
-REC_NA <- na.omit(REC)
+porcentagens <- str_replace(REC$freq_relativa, "\\.", ",")
+legendas <- str_squish(paste(REC$freq, " (", porcentagens, ")"))
 
 
-porcentagens <- str_replace(REC_NA$freq_relativa, "\\.", ",")
-legendas <- str_squish(paste(REC_NA$freq, " (", porcentagens, ")"))
 
-
-ggplot(REC_NA) +
+ggplot(REC) +
   aes(
     x = fct_reorder(Cor, freq, .desc = TRUE), y = freq,
     fill = Categoria, label = legendas
@@ -132,9 +176,115 @@ ggplot(REC_NA) +
   labs(x = "Cor", y = "Frequência") +
   theme_estat()
 
+ggsave("hist_uni_porc.pdf", width = 158, height = 93, units = "mm")
+
+#Analise 4 (certo)
 
 
+Rel <- vendas %>%
+  select(Unique.ID, Price, Rating) %>%
+  rename(Preço = Price, Avaliação = Rating)
 
+Rel <- na.omit(Rel)
+
+Rel = distinct(Rel, Unique.ID, .keep_all = TRUE)
+
+
+ggplot(Rel) +
+  aes(x = Preço ,y = Avaliação) +
+  geom_point(colour = "#A11D21", size = 3) +
+  labs(
+    x = "Preço",
+    y = "Avaliação"
+  ) +
+  theme_estat()
+
+ggsave("disp_uni.pdf", width = 158, height = 93, units = "mm")
+
+cor_test_result <- cor.test(Rel$Preço, Rel$Avaliação, method = "pearson")
+
+print(cor_test_result)
+
+#Analise 5 (certo)
+
+
+devolucao = read.csv("devolução_atualizado.csv")
+
+
+devo = vendas %>%
+  select(Unique.ID,Motivo.devolução,Brand)
+
+
+devo = distinct(devo, Unique.ID, .keep_all = TRUE)
+
+devo = na.omit(devo)
+
+
+novo_banco <- merge(devolucao, devo, by = "Unique.ID", all = TRUE)
+
+novo_banco <- novo_banco[, !names(novo_banco) %in% "Motivo.devolução.y"]
+
+novo_banco <- novo_banco %>% 
+  rename(Motivo.devolução = Motivo.devolução.x)
+
+novo_banco = distinct(novo_banco, Unique.ID, .keep_all = TRUE)
+ 
+
+ueto <- novo_banco %>%
+  na.omit() %>%
+  group_by(Brand, Motivo.devolução) %>%
+  summarise(freq = n()) %>%
+  mutate(
+    freq_relativa = scales::percent(freq / sum(freq))
+  ) %>%
+  ungroup()  
+
+
+porcentagens <- str_replace(ueto$freq_relativa, "\\.", ",")
+legendas <- str_squish(paste(ueto$freq, " (", porcentagens, ")"))
+
+
+ggplot(ueto) +
+  aes(
+    x = fct_reorder(Brand, freq, .desc = TRUE), y = freq,
+    fill = Motivo.devolução, label = legendas
+  ) +
+  geom_col(position = position_dodge2(preserve = "single", padding = 0)) +
+  geom_text(
+    aes(label = legendas),  
+    position = position_dodge(width = 0.9),
+    vjust = -0.09, hjust = -0.2,
+    size = 3
+  ) +
+  labs(x = "Marca", y = "Frequência") +
+  theme_estat() +
+  coord_flip() +
+  ylim(0, max(vapovapo$freq) * 1.2)
+
+
+#Analise 6 (certo?)
+
+momo = vendas %>%
+  select(Unique.ID,Rating,Brand)
+
+momo = distinct(momo, Unique.ID, .keep_all = TRUE)
+
+momo = na.omit(momo)
+
+
+media_por_marca <- momo %>%
+  group_by(Brand) %>%
+  summarise(media = mean(Rating))
+
+
+ggplot(momo, aes(x = Brand, y = Rating)) +
+  geom_bar(stat = "summary", fun = "mean", fill = "#A11D21", color = "black") +
+  geom_text(data = media_por_marca, aes(label = sprintf("%.2f", media), y = media + 0.1), 
+            position = position_dodge(width = 0.9), vjust = 0) +
+  labs(
+       x = "Marca",
+       y = "Avaliação Média") +
+  theme_estat()
 
 
 
